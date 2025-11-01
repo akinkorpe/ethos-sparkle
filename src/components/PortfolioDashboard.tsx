@@ -1,20 +1,44 @@
-import { useAccount, useBalance } from 'wagmi'
+import { useBalance } from 'wagmi'
 import { useEffect, useState } from 'react'
 import { Card } from './ui/card'
-import { TrendingUp, TrendingDown, Wallet, DollarSign } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, DollarSign, Layers } from 'lucide-react'
 import axios from 'axios'
+import { WalletInfo, ViewMode } from '@/types/wallet'
 
 interface TokenPrice {
   usd: number
   usd_24h_change: number
 }
 
-export function PortfolioDashboard() {
-  const { address, isConnected } = useAccount()
-  const { data: balance } = useBalance({ address })
+interface WalletBalance {
+  walletId: string
+  balance: number
+  valueUsd: number
+}
+
+interface PortfolioDashboardProps {
+  wallets: WalletInfo[]
+  selectedWalletId: string | null
+  viewMode: ViewMode
+  hasConnectedWallet: boolean
+}
+
+export function PortfolioDashboard({ 
+  wallets, 
+  selectedWalletId, 
+  viewMode,
+  hasConnectedWallet 
+}: PortfolioDashboardProps) {
+  const selectedWallet = wallets.find(w => w.id === selectedWalletId)
+  const { data: balance } = useBalance({ 
+    address: selectedWallet?.address as `0x${string}` | undefined 
+  })
+  
   const [ethPrice, setEthPrice] = useState<TokenPrice | null>(null)
   const [loading, setLoading] = useState(true)
+  const [walletBalances, setWalletBalances] = useState<WalletBalance[]>([])
 
+  // Fetch ETH price
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -29,14 +53,33 @@ export function PortfolioDashboard() {
       }
     }
 
-    if (isConnected) {
+    if (wallets.length > 0) {
       fetchPrices()
-      const interval = setInterval(fetchPrices, 30000) // Update every 30s
+      const interval = setInterval(fetchPrices, 30000)
       return () => clearInterval(interval)
     }
-  }, [isConnected])
+  }, [wallets.length])
 
-  if (!isConnected) {
+  // Calculate balances for all wallets
+  useEffect(() => {
+    if (viewMode === 'combined' && wallets.length > 0 && ethPrice) {
+      // In a real implementation, you would fetch balances for all wallets
+      // For now, we'll use the connected wallet balance if available
+      const balances: WalletBalance[] = wallets.map(wallet => {
+        const bal = selectedWallet?.address === wallet.address && balance 
+          ? parseFloat(balance.formatted) 
+          : 0
+        return {
+          walletId: wallet.id,
+          balance: bal,
+          valueUsd: bal * ethPrice.usd
+        }
+      })
+      setWalletBalances(balances)
+    }
+  }, [viewMode, wallets, ethPrice, balance, selectedWallet])
+
+  if (!hasConnectedWallet || wallets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
         <Wallet className="h-16 w-16 mb-4 text-muted-foreground" />
@@ -48,13 +91,41 @@ export function PortfolioDashboard() {
     )
   }
 
-  const ethBalance = balance ? parseFloat(balance.formatted) : 0
-  const totalValue = ethPrice ? ethBalance * ethPrice.usd : 0
+  // Calculate values based on view mode
+  let ethBalance = 0
+  let totalValue = 0
+
+  if (viewMode === 'individual' && selectedWallet && balance) {
+    ethBalance = parseFloat(balance.formatted)
+    totalValue = ethPrice ? ethBalance * ethPrice.usd : 0
+  } else if (viewMode === 'combined') {
+    // Sum all wallet balances
+    walletBalances.forEach(wb => {
+      ethBalance += wb.balance
+      totalValue += wb.valueUsd
+    })
+  }
+
   const change24h = ethPrice?.usd_24h_change || 0
   const isPositive = change24h >= 0
 
   return (
     <div className="space-y-6">
+      {/* View Mode Indicator */}
+      {viewMode === 'combined' && wallets.length > 1 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Layers className="h-4 w-4" />
+          <span>Viewing combined portfolio from {wallets.length} wallets</span>
+        </div>
+      )}
+      
+      {viewMode === 'individual' && selectedWallet && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Wallet className="h-4 w-4" />
+          <span>Viewing: {selectedWallet.label}</span>
+        </div>
+      )}
+
       {/* Total Portfolio Value */}
       <Card className="glass-card p-8 hover-glow border-2">
         <div className="space-y-2">

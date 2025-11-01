@@ -1,22 +1,60 @@
 import { WalletConnect } from '@/components/WalletConnect'
 import { PortfolioDashboard } from '@/components/PortfolioDashboard'
+import { MultiWalletManager } from '@/components/MultiWalletManager'
+import { ViewModeSwitcher } from '@/components/ViewModeSwitcher'
+import { useWalletManager } from '@/hooks/useWalletManager'
+import { useAccount } from 'wagmi'
 import heroImage from '@/assets/hero-crypto.jpg'
 import { TrendingUp } from 'lucide-react'
 
 const Index = () => {
+  const { address, isConnected } = useAccount()
+  const walletManager = useWalletManager()
+
+  const handleWalletConnected = (connectedAddress: string) => {
+    // Check if this wallet is already added
+    const exists = walletManager.wallets.find(
+      w => w.address.toLowerCase() === connectedAddress.toLowerCase()
+    )
+    
+    if (!exists) {
+      walletManager.addWallet(connectedAddress, 'Main Wallet')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border/50 backdrop-blur-xl bg-background/80 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <div className="h-10 w-10 rounded-lg gradient-primary flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-white" />
+                <TrendingUp className="h-6 w-6 text-foreground" />
               </div>
               <h1 className="text-2xl font-bold text-gradient">Portfolio Tracker</h1>
             </div>
-            <WalletConnect />
+            
+            <div className="flex items-center gap-3 flex-wrap">
+              {walletManager.wallets.length > 0 && (
+                <>
+                  <ViewModeSwitcher 
+                    viewMode={walletManager.viewMode}
+                    onToggle={walletManager.toggleViewMode}
+                  />
+                  <MultiWalletManager
+                    wallets={walletManager.wallets}
+                    selectedWalletId={walletManager.selectedWalletId}
+                    onAddWallet={walletManager.addWallet}
+                    onRemoveWallet={walletManager.removeWallet}
+                    onUpdateWallet={walletManager.updateWallet}
+                    onSelectWallet={walletManager.setSelectedWalletId}
+                    onSetPrimary={walletManager.setPrimaryWallet}
+                  />
+                </>
+              )}
+              <WalletConnect onConnected={handleWalletConnected} />
+            </div>
           </div>
         </div>
       </header>
@@ -45,7 +83,12 @@ const Index = () => {
 
       {/* Dashboard Section */}
       <section className="container mx-auto px-4 py-12">
-        <PortfolioDashboard />
+        <PortfolioDashboard 
+          wallets={walletManager.wallets}
+          selectedWalletId={walletManager.selectedWalletId}
+          viewMode={walletManager.viewMode}
+          hasConnectedWallet={isConnected}
+        />
       </section>
 
       {/* Features Section */}
